@@ -6,6 +6,7 @@ const userSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
     role: { type: String, enum: ["customer", "partner", "admin"], default: "customer" },
+    trustTier: { type: String, enum: ["new", "trusted", "restricted"], default: "new" },
     // Only set when role === "partner" — which café this person manages.
     cafeId: { type: mongoose.Schema.Types.ObjectId, ref: "Cafe", default: null },
   },

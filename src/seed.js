@@ -75,7 +75,7 @@ async function seed() {
     });
     cafeDocsByName[c.name] = cafe;
     for (const item of c.items) {
-      await MenuItem.create({ ...item, cafeId: cafe._id });
+      await MenuItem.create({ ...item, cafeId: cafe._id, approvalStatus: "approved", approvalSource: "admin" });
     }
   }
 
@@ -86,6 +86,7 @@ async function seed() {
     const user = await User.create({
       name: u.name, email: u.email, passwordHash, role: u.role,
       cafeId: cafe ? cafe._id : null,
+      trustTier: u.role === "partner" ? "trusted" : "new",
     });
     if (cafe) {
       cafe.ownerId = user._id;

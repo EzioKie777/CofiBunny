@@ -27,7 +27,7 @@ router.post("/", requireAuth, requireRole("customer"), async (req, res) => {
     if (menuItems.length !== items.length) {
       return res.status(400).json({ error: "One or more menu items were not found" });
     }
-    const unavailable = menuItems.filter((m) => !m.available);
+    const unavailable = menuItems.filter((m) => !m.available || (m.approvalStatus && m.approvalStatus !== "approved"));
     if (unavailable.length) {
       return res.status(400).json({ error: `Sold out right now: ${unavailable.map((m) => m.name).join(", ")}` });
     }

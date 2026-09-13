@@ -9,10 +9,16 @@ const menuItemSchema = new mongoose.Schema(
     desc: { type: String, default: "" },
     photoUrl: { type: String, default: null },
     available: { type: Boolean, default: true },
+    approvalStatus: { type: String, enum: ["pending", "approved", "rejected"], default: "approved" },
+    approvalSource: { type: String, enum: ["legacy", "automated", "admin", "customer-report"], default: "legacy" },
+    submittedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    riskFlags: { type: [String], default: [] },
+    rejectionReason: { type: String, default: "" },
   },
   { timestamps: true }
 );
 
 menuItemSchema.index({ cafeId: 1 });
+menuItemSchema.index({ cafeId: 1, approvalStatus: 1 });
 
 export default mongoose.model("MenuItem", menuItemSchema);

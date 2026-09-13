@@ -683,6 +683,7 @@ function CofiBunnyConnected() {
   const [adminPage, setAdminPage] = useState(1);
   const [adminCafes, setAdminCafes] = useState([]);
   const [activeOrders, setActiveOrders] = useState([]);
+  const [moderationItems, setModerationItems] = useState([]);
 
   function api(path, opts = {}) {
     return apiCall(apiBase, path, { ...opts, token: "token" in opts ? opts.token : token });
@@ -762,6 +763,13 @@ function CofiBunnyConnected() {
       setOrderError(e.message);
     }
     setPlacingOrder(false);
+  }
+
+  async function reportMenuItem(itemId) {
+    const reason = window.prompt("Why are you reporting this item? Use unsafe, misleading, quality, or other.");
+    if (!reason) return;
+    await api(`/cafes/menu-items/${itemId}/reports`, { method: "POST", body: { reason: reason.trim().toLowerCase() } });
+    window.alert("Thanks. The item was sent to the café review queue.");
   }
 
   // ---- orders / recommendations ----
@@ -845,6 +853,7 @@ function CofiBunnyConnected() {
     loadAdminUsers();
     api("/admin/cafes").then(setAdminCafes).catch(() => {});
     api("/orders/active").then(setActiveOrders).catch(() => {});
+    api("/admin/menu-items?status=pending").then(setModerationItems).catch(() => {});
   }, [screen]);
   useEffect(() => {
     if (screen !== "admin") return;
@@ -856,9 +865,17 @@ function CofiBunnyConnected() {
     const updated = await api(`/admin/users/${userId}/role`, { method: "PATCH", body: { role, cafeId } });
     setAdminUsers((prev) => ({ ...prev, users: prev.users.map((u) => (u._id === updated._id ? updated : u)) }));
   }
+  async function saveUserTrust(userId, trustTier) {
+    const updated = await api(`/admin/users/${userId}/trust`, { method: "PATCH", body: { trustTier } });
+    setAdminUsers((prev) => ({ ...prev, users: prev.users.map((u) => (u._id === updated._id ? updated : u)) }));
+  }
   async function forceOrderStatus(orderId, status) {
     const updated = await api(`/orders/${orderId}/status`, { method: "PATCH", body: { status } });
     setActiveOrders((prev) => prev.map((o) => (o._id === updated._id ? updated : o)).filter((o) => o.status !== "delivered"));
+  }
+  async function reviewMenuItem(itemId, decision) {
+    const updated = await api(`/admin/menu-items/${itemId}/review`, { method: "PATCH", body: { decision } });
+    setModerationItems((prev) => prev.filter((item) => item._id !== updated._id));
   }
 
   return (
@@ -902,6 +919,7 @@ function CofiBunnyConnected() {
                 onChangeQty={changeQty}
                 onBack={() => setScreen("market")}
                 onViewCart={() => setScreen("cart")}
+                onReport={reportMenuItem}
               />
             )}
 
@@ -958,7 +976,10 @@ function CofiBunnyConnected() {
                 cafes={adminCafes}
                 orders={activeOrders}
                 onSaveRole={saveUserRole}
+                onSaveTrust={saveUserTrust}
                 onForceStatus={forceOrderStatus}
+                moderationItems={moderationItems}
+                onReviewMenuItem={reviewMenuItem}
               />
             )}
           </main>
@@ -1193,7 +1214,7 @@ function Marketplace({ userName, cafes, loading, error, onOpenCafe }) {
 
 /* ---------------------------------- menu ------------------------------------ */
 
-function MenuScreen({ data, loading, error, category, setCategory, cart, onAdd, onChangeQty, onBack, onViewCart }) {
+function MenuScreen({ data, loading, error, category, setCategory, cart, onAdd, onChangeQty, onBack, onViewCart, onReport }) {
   if (loading || !data) return <p className="cb-loadingrow">{error ? error : "Loading menu…"}</p>;
   const { cafe, items: allItems } = data;
   const categories = ["All", ...Array.from(new Set(allItems.map((i) => i.category)))];
@@ -1246,6 +1267,7 @@ function MenuScreen({ data, loading, error, category, setCategory, cart, onAdd, 
                   <h4>{item.name}</h4>
                   <p>{item.desc}</p>
                   {!inStock && <span className="cb-outtag">Sold out today</span>}
+                  <button className="cb-menueditbtn" onClick={() => onReport(item._id)}>Report item</button>
                 </div>
               </div>
               <div className="cb-item-side">
@@ -1571,7 +1593,7 @@ function PartnerScreen({ data, loading, orders, onToggleAvailability, onCreateMe
         {items.map((item) => (
           <div key={item._id} className="cb-availrow">
             <PhotoFrame variant="item" src={item.photoUrl} onUpload={(file) => onUploadItemPhoto(item, file)} />
-            <div className="cb-availrow-info"><h4>{item.name}</h4><span className="cb-muted">{peso(item.price)}</span></div>
+            <div className="cb-availrow-info"><h4>{item.name}</h4><span className="cb-muted">{peso(item.price)} · {item.approvalStatus || "approved"}</span>{item.riskFlags?.length > 0 && <span className="cb-outtag">Needs review: {item.riskFlags.join(", ")}</span>}</div>
             <button className="cb-menueditbtn" onClick={() => { setEditingItem(item); setAddingItem(false); }}>Edit</button>
             <button className="cb-toggle" onClick={() => onToggleAvailability(item)}>
               {item.available ? <Icon name="toggleRight" size={30} color="var(--mocha-600)" /> : <Icon name="toggleLeft" size={30} color="var(--latte-300)" />}
@@ -1612,15 +1634,17 @@ function PartnerScreen({ data, loading, orders, onToggleAvailability, onCreateMe
 
 /* ---------------------------------- admin ------------------------------------- */
 
-function AdminUserRow({ user, cafes, onSave }) {
+function AdminUserRow({ user, cafes, onSave, onSaveTrust }) {
   const [role, setRole] = useState(user.role);
   const [cafeId, setCafeId] = useState(user.cafeId || "");
+  const [trustTier, setTrustTier] = useState(user.trustTier || "new");
   const [saving, setSaving] = useState(false);
-  const dirty = role !== user.role || (role === "partner" && cafeId !== (user.cafeId || ""));
+  const dirty = role !== user.role || (role === "partner" && cafeId !== (user.cafeId || "")) || trustTier !== (user.trustTier || "new");
 
   async function save() {
     setSaving(true);
     await onSave(user._id, role, role === "partner" ? cafeId : undefined);
+    if (trustTier !== (user.trustTier || "new")) await onSaveTrust(user._id, trustTier);
     setSaving(false);
   }
 
@@ -1640,6 +1664,11 @@ function AdminUserRow({ user, cafes, onSave }) {
             {cafes.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
           </select>
         )}
+        <select value={trustTier} onChange={(e) => setTrustTier(e.target.value)} title="Partner trust tier">
+          <option value="new">New</option>
+          <option value="trusted">Trusted</option>
+          <option value="restricted">Restricted</option>
+        </select>
         {dirty && (role !== "partner" || cafeId) && (
           <button className="cb-savebtn" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
         )}
@@ -1648,11 +1677,30 @@ function AdminUserRow({ user, cafes, onSave }) {
   );
 }
 
-function AdminScreen({ users, search, setSearch, page, setPage, cafes, orders, onSaveRole, onForceStatus }) {
+function AdminScreen({ users, search, setSearch, page, setPage, cafes, orders, onSaveRole, onSaveTrust, onForceStatus, moderationItems, onReviewMenuItem }) {
   return (
     <div>
       <h1 className="cb-pagetitle">Admin console</h1>
       <p className="cb-muted">Manage who can access the partner and admin dashboards.</p>
+
+      <h2 className="cb-subtitle">Menu approval queue</h2>
+      <p className="cb-muted">New or flagged partner items stay hidden from customers until reviewed.</p>
+      <div className="cb-orderlist">
+        {moderationItems.length === 0 && <p className="cb-muted">No menu items waiting for review.</p>}
+        {moderationItems.map((item) => (
+          <div key={item._id} className="cb-card cb-orderrow">
+            <div>
+              <h4>{item.name} · {peso(item.price)}</h4>
+              <span className="cb-muted">{item.cafeId?.name || "Café"} · {item.category} · {item.desc}</span>
+              <span className="cb-outtag">{item.riskFlags?.join(", ") || "manual approval"} · {item.openReportCount || 0} open reports</span>
+            </div>
+            <div className="cb-orderrow-right">
+              <button className="cb-btn-ghost" onClick={() => onReviewMenuItem(item._id, "rejected")}>Reject</button>
+              <button className="cb-btn-primary" onClick={() => onReviewMenuItem(item._id, "approved")}>Approve</button>
+            </div>
+          </div>
+        ))}
+      </div>
 
       <h2 className="cb-subtitle">Live orders</h2>
       <div className="cb-orderlist">
@@ -1684,7 +1732,7 @@ function AdminScreen({ users, search, setSearch, page, setPage, cafes, orders, o
       <div className="cb-card cb-table">
         <div className="cb-table-head"><span>Name</span><span>Email</span><span>Role</span></div>
         {users.users.map((u) => (
-          <AdminUserRow key={u._id} user={u} cafes={cafes} onSave={onSaveRole} />
+          <AdminUserRow key={u._id} user={u} cafes={cafes} onSave={onSaveRole} onSaveTrust={onSaveTrust} />
         ))}
       </div>
 
