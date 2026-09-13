@@ -115,6 +115,13 @@
 .cb-feedback-panel textarea { min-height: 110px; resize: vertical; }
 .cb-feedback-success { padding: 12px; border-radius: 12px; background: #E4EBDF; color: var(--sage-500); font-size: 13px; }
 .cb-item-rating { margin-top: 7px; }
+.cb-feedback-filters { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0 16px; }
+.cb-feedback-filters button { padding: 7px 12px; border: 1px solid var(--latte-300); border-radius: 999px; color: var(--mocha-600); background: var(--paper); font-size: 12px; text-transform: capitalize; }
+.cb-feedback-filters button.active { background: var(--mocha-900); color: var(--cream); border-color: var(--mocha-900); }
+.cb-feedback-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.cb-feedback-row p { margin-top: 7px; color: var(--mocha-600); font-size: 13px; line-height: 1.45; }
+.cb-feedback-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.cb-feedback-row-actions select { border: 1px solid var(--latte-300); border-radius: 999px; padding: 7px 9px; background: var(--paper); color: var(--mocha-900); font: inherit; font-size: 12px; }
 
 /* menu */
 .cb-backlink { display: inline-flex; align-items: center; gap: 4px; color: var(--mocha-600); font-size: 13px; margin-bottom: 16px; }
@@ -701,6 +708,9 @@ function CofiBunnyConnected() {
   const [adminCafes, setAdminCafes] = useState([]);
   const [activeOrders, setActiveOrders] = useState([]);
   const [moderationItems, setModerationItems] = useState([]);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [adminFeedback, setAdminFeedback] = useState({ reports: [], counts: [] });
+  const [adminFeedbackStatus, setAdminFeedbackStatus] = useState("open");
 
   function api(path, opts = {}) {
     return apiCall(apiBase, path, { ...opts, token: "token" in opts ? opts.token : token });
@@ -728,7 +738,11 @@ function CofiBunnyConnected() {
     if (screen !== "market") return;
     setCafesLoading(true); setCafesError(null);
     api("/cafes")
-      .then((data) => { setCafes(data); data.forEach(cacheCafe); })
+      .then(async (data) => {
+        setCafes(data); data.forEach(cacheCafe);
+        const details = await Promise.all(data.map((cafe) => api(`/cafes/${cafe._id}`)));
+        details.forEach((detail) => cacheItems(detail.cafe, detail.items));
+      })
       .catch((e) => setCafesError(e.message))
       .finally(() => setCafesLoading(false));
   }, [screen]);
@@ -782,11 +796,20 @@ function CofiBunnyConnected() {
     setPlacingOrder(false);
   }
 
-  async function reportMenuItem(itemId) {
-    const reason = window.prompt("Why are you reporting this item? Use unsafe, misleading, quality, or other.");
-    if (!reason) return;
-    await api(`/cafes/menu-items/${itemId}/reports`, { method: "POST", body: { reason: reason.trim().toLowerCase() } });
-    window.alert("Thanks. The item was sent to the café review queue.");
+  async function rateTarget(targetType, targetId, value) {
+    const result = await api("/ratings", { method: "POST", body: { targetType, targetId, value } });
+    if (targetType === "cafe") {
+      setCafes((prev) => prev.map((cafe) => (cafe._id === targetId ? { ...cafe, rating: result.rating, ratingCount: result.ratingCount } : cafe)));
+      setMenuData((prev) => prev && prev.cafe._id === targetId ? { ...prev, cafe: { ...prev.cafe, rating: result.rating, ratingCount: result.ratingCount } } : prev);
+    } else {
+      setMenuData((prev) => prev ? { ...prev, items: prev.items.map((item) => item._id === targetId ? { ...item, rating: result.rating, ratingCount: result.ratingCount } : item) } : prev);
+    }
+  }
+
+  async function submitFeedback(payload) {
+    await api("/feedback", { method: "POST", body: payload });
+    setFeedbackOpen(false);
+    window.alert("Thanks. Your feedback has been sent to the review queue.");
   }
 
   // ---- orders / recommendations ----
@@ -871,7 +894,8 @@ function CofiBunnyConnected() {
     api("/admin/cafes").then(setAdminCafes).catch(() => {});
     api("/orders/active").then(setActiveOrders).catch(() => {});
     api("/admin/menu-items?status=pending").then(setModerationItems).catch(() => {});
-  }, [screen]);
+    api(`/admin/feedback?status=${adminFeedbackStatus}`).then(setAdminFeedback).catch(() => {});
+  }, [screen, adminFeedbackStatus]);
   useEffect(() => {
     if (screen !== "admin") return;
     const t = setTimeout(loadAdminUsers, 350);
@@ -893,6 +917,10 @@ function CofiBunnyConnected() {
   async function reviewMenuItem(itemId, decision) {
     const updated = await api(`/admin/menu-items/${itemId}/review`, { method: "PATCH", body: { decision } });
     setModerationItems((prev) => prev.filter((item) => item._id !== updated._id));
+  }
+  async function updateFeedback(reportId, changes) {
+    const updated = await api(`/admin/feedback/${reportId}`, { method: "PATCH", body: changes });
+    setAdminFeedback((prev) => ({ ...prev, reports: prev.reports.map((report) => report._id === updated._id ? updated : report) }));
   }
 
   return (
@@ -921,6 +949,7 @@ function CofiBunnyConnected() {
                 loading={cafesLoading}
                 error={cafesError}
                 onOpenCafe={(id) => { setSelectedCafeId(id); setCategory("All"); setScreen("menu"); }}
+                onRate={rateTarget}
               />
             )}
 
@@ -936,7 +965,7 @@ function CofiBunnyConnected() {
                 onChangeQty={changeQty}
                 onBack={() => setScreen("market")}
                 onViewCart={() => setScreen("cart")}
-                onReport={reportMenuItem}
+                onRate={rateTarget}
               />
             )}
 
@@ -997,9 +1026,21 @@ function CofiBunnyConnected() {
                 onForceStatus={forceOrderStatus}
                 moderationItems={moderationItems}
                 onReviewMenuItem={reviewMenuItem}
+                feedback={adminFeedback}
+                feedbackStatus={adminFeedbackStatus}
+                setFeedbackStatus={setAdminFeedbackStatus}
+                onUpdateFeedback={updateFeedback}
               />
             )}
           </main>
+          {me?.role === "customer" && (
+            <>
+              <button className="cb-feedback-ribbon" onClick={() => setFeedbackOpen(true)} title="Send feedback">
+                <Icon name="heart" size={15} /> Feedback
+              </button>
+              {feedbackOpen && <FeedbackModal cafes={cafes} items={Object.values(itemsCatalog)} onClose={() => setFeedbackOpen(false)} onSubmit={submitFeedback} />}
+            </>
+          )}
         </div>
       )}
     </div>
@@ -1179,7 +1220,20 @@ function TopNav({ me, cartCount, onCart, onLogo, onOrders, onLogout }) {
 
 /* ------------------------------- marketplace -------------------------------- */
 
-function Marketplace({ userName, cafes, loading, error, onOpenCafe }) {
+function StarRating({ value = 5, count = 0, onRate, size = 15 }) {
+  return (
+    <span className="cb-rating-control" onClick={(event) => event.stopPropagation()}>
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button key={star} className={star <= Math.round(value) ? "cb-star-btn active" : "cb-star-btn"} onClick={() => onRate(star)} aria-label={`Rate ${star} out of 5`}>
+          <Icon name="star" size={size} fill={star <= Math.round(value) ? "currentColor" : "none"} />
+        </button>
+      ))}
+      {count > 0 && <span className="cb-rating-count">{count}</span>}
+    </span>
+  );
+}
+
+function Marketplace({ userName, cafes, loading, error, onOpenCafe, onRate }) {
   const [query, setQuery] = useState("");
   const filtered = cafes.filter(
     (c) => c.name.toLowerCase().includes(query.toLowerCase()) || c.tags.some((t) => t.toLowerCase().includes(query.toLowerCase()))
@@ -1208,20 +1262,21 @@ function Marketplace({ userName, cafes, loading, error, onOpenCafe }) {
         {filtered.map((cafe) => {
           const iconName = pickIcon(cafe.tags);
           return (
-            <button key={cafe._id} className="cb-cafecard" onClick={() => onOpenCafe(cafe._id)}>
+            <div key={cafe._id} className="cb-cafecard" role="button" tabIndex="0" onClick={() => onOpenCafe(cafe._id)} onKeyDown={(event) => event.key === "Enter" && onOpenCafe(cafe._id)}>
               <div className="cb-cafecard-hero" style={{ background: `linear-gradient(135deg, ${cafe.soft}, ${cafe.accent}33)` }}>
                 {cafe.coverPhotoUrl ? <img src={cafe.coverPhotoUrl} alt={cafe.name} className="cb-cafecard-hero-img" /> : <Icon name={iconName} size={30} color={cafe.accent} />}
               </div>
               <div className="cb-cafecard-body">
                 <div className="cb-cafecard-toprow">
                   <h3>{cafe.name}</h3>
-                  <span className="cb-rating"><Icon name="star" size={13} fill="var(--mocha-600)" color="var(--mocha-600)" /> {cafe.rating}</span>
+                  <span className="cb-rating"><Icon name="star" size={13} fill="var(--mocha-600)" color="var(--mocha-600)" /> {Number(cafe.rating || 5).toFixed(1)} <span className="cb-rating-count">({cafe.ratingCount || 0})</span></span>
                 </div>
                 <p className="cb-cafecard-tagline">{cafe.tagline}</p>
                 <div className="cb-chiprow">{cafe.tags.map((t) => <span key={t} className="cb-chip">{t}</span>)}</div>
                 <div className="cb-cafecard-meta"><span>{cafe.neighborhood}</span></div>
+                <div className="cb-cafe-actions"><span className="cb-muted">Rate this café</span><StarRating value={cafe.rating} count={cafe.ratingCount} onRate={(value) => onRate("cafe", cafe._id, value)} /></div>
               </div>
-            </button>
+            </div>
           );
         })}
       </div>
@@ -1231,7 +1286,7 @@ function Marketplace({ userName, cafes, loading, error, onOpenCafe }) {
 
 /* ---------------------------------- menu ------------------------------------ */
 
-function MenuScreen({ data, loading, error, category, setCategory, cart, onAdd, onChangeQty, onBack, onViewCart, onReport }) {
+function MenuScreen({ data, loading, error, category, setCategory, cart, onAdd, onChangeQty, onBack, onViewCart, onRate }) {
   if (loading || !data) return <p className="cb-loadingrow">{error ? error : "Loading menu…"}</p>;
   const { cafe, items: allItems } = data;
   const categories = ["All", ...Array.from(new Set(allItems.map((i) => i.category)))];
@@ -1283,8 +1338,8 @@ function MenuScreen({ data, loading, error, category, setCategory, cart, onAdd, 
                 <div className="cb-item-info">
                   <h4>{item.name}</h4>
                   <p>{item.desc}</p>
+                  <div className="cb-item-rating"><StarRating value={item.rating} count={item.ratingCount} size={14} onRate={(value) => onRate("menuItem", item._id, value)} /></div>
                   {!inStock && <span className="cb-outtag">Sold out today</span>}
-                  <button className="cb-menueditbtn" onClick={() => onReport(item._id)}>Report item</button>
                 </div>
               </div>
               <div className="cb-item-side">
@@ -1533,6 +1588,40 @@ function OrdersScreen({ orders, loading, recommended, onShop }) {
   );
 }
 
+function FeedbackModal({ cafes, items, onClose, onSubmit }) {
+  const [targetType, setTargetType] = useState("service");
+  const [targetId, setTargetId] = useState("");
+  const [category, setCategory] = useState("quality");
+  const [details, setDetails] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function submit(event) {
+    event.preventDefault();
+    if (details.trim().length < 10) return setError("Please share at least 10 characters.");
+    if (targetType !== "service" && !targetId) return setError("Choose what you are reporting.");
+    setSaving(true); setError(null);
+    try { await onSubmit({ targetType, targetId: targetType === "service" ? null : targetId, category, details: details.trim() }); }
+    catch (submitError) { setError(submitError.message); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <div className="cb-feedback-modal" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <form className="cb-feedback-panel" onSubmit={submit}>
+        <div className="cb-feedback-head"><div><h2>Share feedback</h2><p className="cb-muted">Help us keep every hop thoughtful.</p></div><button type="button" className="cb-feedback-close" onClick={onClose}>×</button></div>
+        <label className="cb-field"><span>What is this about?</span><select value={targetType} onChange={(event) => { setTargetType(event.target.value); setTargetId(""); }}><option value="service">Cofi Bunny service</option><option value="cafe">A café</option><option value="menuItem">A menu item</option></select></label>
+        {targetType === "cafe" && <label className="cb-field"><span>Café</span><select value={targetId} onChange={(event) => setTargetId(event.target.value)}><option value="">Choose a café…</option>{cafes.map((cafe) => <option key={cafe._id} value={cafe._id}>{cafe.name}</option>)}</select></label>}
+        {targetType === "menuItem" && <label className="cb-field"><span>Menu item and café</span><select value={targetId} onChange={(event) => setTargetId(event.target.value)}><option value="">Choose an item…</option>{items.map((item) => <option key={item._id} value={item._id}>{item.name} · {item.cafeName || "Café"}</option>)}</select></label>}
+        <label className="cb-field"><span>Category</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option value="quality">Quality</option><option value="safety">Safety concern</option><option value="misleading">Misleading information</option><option value="order">Order issue</option><option value="delivery">Delivery issue</option><option value="staff">Staff experience</option><option value="other">Other</option></select></label>
+        <label className="cb-field"><span>Details</span><textarea value={details} onChange={(event) => setDetails(event.target.value)} placeholder="Tell us what happened…" required /></label>
+        {error && <div className="cb-errorbanner">{error}</div>}
+        <button className="cb-btn-primary cb-fullwidth" disabled={saving}>{saving ? "Sending…" : "Send feedback"}</button>
+      </form>
+    </div>
+  );
+}
+
 /* --------------------------------- partner ----------------------------------- */
 
 function PartnerMenuEditor({ item, onSave, onCancel }) {
@@ -1694,11 +1783,25 @@ function AdminUserRow({ user, cafes, onSave, onSaveTrust }) {
   );
 }
 
-function AdminScreen({ users, search, setSearch, page, setPage, cafes, orders, onSaveRole, onSaveTrust, onForceStatus, moderationItems, onReviewMenuItem }) {
+function AdminScreen({ users, search, setSearch, page, setPage, cafes, orders, onSaveRole, onSaveTrust, onForceStatus, moderationItems, onReviewMenuItem, feedback, feedbackStatus, setFeedbackStatus, onUpdateFeedback }) {
   return (
     <div>
       <h1 className="cb-pagetitle">Admin console</h1>
       <p className="cb-muted">Manage who can access the partner and admin dashboards.</p>
+
+      <h2 className="cb-subtitle">Customer feedback</h2>
+      <div className="cb-feedback-filters">
+        {['open', 'in_review', 'resolved', 'dismissed'].map((status) => <button key={status} className={feedbackStatus === status ? "active" : ""} onClick={() => setFeedbackStatus(status)}>{status.replace("_", " ")}</button>)}
+      </div>
+      <div className="cb-orderlist">
+        {feedback.reports.length === 0 && <p className="cb-muted">No reports in this queue.</p>}
+        {feedback.reports.map((report) => (
+          <div key={report._id} className="cb-card cb-feedback-row">
+            <div><h4>{report.targetName}</h4><span className="cb-muted">{report.category} · {report.reportedBy?.name || "Customer"}</span><p>{report.details}</p></div>
+            <div className="cb-feedback-row-actions"><select value={report.priority} onChange={(event) => onUpdateFeedback(report._id, { priority: event.target.value })}><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select><select value={report.status} onChange={(event) => onUpdateFeedback(report._id, { status: event.target.value })}><option value="open">Open</option><option value="in_review">In review</option><option value="resolved">Resolved</option><option value="dismissed">Dismissed</option></select></div>
+          </div>
+        ))}
+      </div>
 
       <h2 className="cb-subtitle">Menu approval queue</h2>
       <p className="cb-muted">New or flagged partner items stay hidden from customers until reviewed.</p>
