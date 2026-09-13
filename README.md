@@ -101,6 +101,10 @@ curl -X POST http://localhost:4000/api/orders \
 | GET | `/api/admin/menu-items?status=pending` | admin | review pending or reported items |
 | PATCH | `/api/admin/menu-items/:itemId/review` | admin | approve or reject a menu item |
 | GET | `/api/admin/menu-reports` | admin | inspect open customer reports |
+| POST | `/api/ratings` | customer | rate a café or menu item from 1 to 5 |
+| POST | `/api/feedback` | customer | report a café, menu item, or customer service issue |
+| GET | `/api/admin/feedback` | admin | filtered feedback queue with status/category counts |
+| PATCH | `/api/admin/feedback/:id` | admin | assign, prioritize, resolve, or dismiss feedback |
 
 Menu submissions must use prices from P20 to P1000, a 12–300 character description,
 and clean text. Trusted partners with no automated risk flags publish immediately;

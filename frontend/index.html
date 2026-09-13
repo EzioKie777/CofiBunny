@@ -98,6 +98,23 @@
 .cb-chiprow { display: flex; gap: 6px; flex-wrap: wrap; }
 .cb-chip { font-size: 11.5px; background: var(--cream-100); color: var(--mocha-600); padding: 4px 10px; border-radius: 999px; display: inline-flex; align-items: center; gap: 4px; }
 .cb-cafecard-meta { display: flex; gap: 6px; font-size: 12.5px; color: var(--mocha-600); margin-top: 4px; }
+.cb-cafe-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
+.cb-rating-control { display: inline-flex; align-items: center; gap: 2px; }
+.cb-star-btn { padding: 2px; color: var(--latte-300); line-height: 1; }
+.cb-star-btn.active { color: var(--blush-500); }
+.cb-star-btn:hover { color: var(--blush-500); }
+.cb-rating-count { color: var(--mocha-600); font-size: 11px; margin-left: 3px; }
+.cb-feedback-ribbon { position: fixed; right: 18px; bottom: 22px; z-index: 5; display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-radius: 999px; color: var(--cream); background: var(--mocha-900); box-shadow: 0 10px 28px rgba(62,43,33,0.24); font-size: 13px; font-weight: 700; }
+.cb-feedback-ribbon:hover { background: var(--blush-500); }
+.cb-feedback-modal { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(62,43,33,0.38); }
+.cb-feedback-panel { width: min(520px, 100%); max-height: calc(100vh - 40px); overflow: auto; background: var(--paper); border: 1px solid var(--latte-300); border-radius: 20px; padding: 24px; box-shadow: 0 20px 60px rgba(62,43,33,0.24); }
+.cb-feedback-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
+.cb-feedback-head h2 { font-size: 23px; margin-bottom: 5px; }
+.cb-feedback-close { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--latte-300) !important; }
+.cb-feedback-panel textarea, .cb-feedback-panel select { width: 100%; padding: 12px 14px; border: 1px solid var(--latte-300); border-radius: 12px; background: var(--paper); color: var(--mocha-900); font: inherit; }
+.cb-feedback-panel textarea { min-height: 110px; resize: vertical; }
+.cb-feedback-success { padding: 12px; border-radius: 12px; background: #E4EBDF; color: var(--sage-500); font-size: 13px; }
+.cb-item-rating { margin-top: 7px; }
 
 /* menu */
 .cb-backlink { display: inline-flex; align-items: center; gap: 4px; color: var(--mocha-600); font-size: 13px; margin-bottom: 16px; }

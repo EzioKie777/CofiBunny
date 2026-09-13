@@ -3,6 +3,7 @@ import User from "../models/User.js";
 import Cafe from "../models/Cafe.js";
 import MenuItem from "../models/MenuItem.js";
 import MenuReport from "../models/MenuReport.js";
+import FeedbackReport from "../models/FeedbackReport.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 
 const router = Router();
@@ -108,6 +109,37 @@ router.get("/menu-reports", async (_req, res) => {
     .populate("reportedBy", "name email")
     .sort({ createdAt: -1 });
   res.json(reports);
+});
+
+router.get("/feedback", async (req, res) => {
+  const status = ["open", "in_review", "resolved", "dismissed"].includes(req.query.status) ? req.query.status : "open";
+  const category = ["safety", "quality", "misleading", "order", "delivery", "staff", "other"].includes(req.query.category)
+    ? req.query.category
+    : null;
+  const filter = { status };
+  if (category) filter.category = category;
+  const [reports, counts] = await Promise.all([
+    FeedbackReport.find(filter).populate("reportedBy", "name email").sort({ priority: -1, createdAt: -1 }).limit(100),
+    FeedbackReport.aggregate([{ $group: { _id: { status: "$status", category: "$category" }, count: { $sum: 1 } } }]),
+  ]);
+  res.json({ reports, counts });
+});
+
+router.patch("/feedback/:id", async (req, res) => {
+  const { status, priority, resolutionNote } = req.body;
+  if (status !== undefined && !["open", "in_review", "resolved", "dismissed"].includes(status)) {
+    return res.status(400).json({ error: "Invalid feedback status" });
+  }
+  if (priority !== undefined && !["low", "normal", "high", "urgent"].includes(priority)) {
+    return res.status(400).json({ error: "Invalid feedback priority" });
+  }
+  const report = await FeedbackReport.findByIdAndUpdate(
+    req.params.id,
+    { ...(status !== undefined ? { status } : {}), ...(priority !== undefined ? { priority } : {}), ...(resolutionNote !== undefined ? { resolutionNote: String(resolutionNote).trim() } : {}), assignedTo: req.user.id },
+    { new: true, runValidators: true }
+  ).populate("reportedBy", "name email");
+  if (!report) return res.status(404).json({ error: "Feedback report not found" });
+  res.json(report);
 });
 
 export default router;
