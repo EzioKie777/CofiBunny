@@ -48,6 +48,9 @@ router.post("/:id/menu-items", requireAuth, requireRole("partner", "admin"), asy
   if (!name || !category || price === undefined) {
     return res.status(400).json({ error: "name, category, and price are required" });
   }
+  if (typeof price !== "number" || !Number.isFinite(price) || price < 0) {
+    return res.status(400).json({ error: "price must be a non-negative number" });
+  }
 
   const item = await MenuItem.create({ cafeId: cafe._id, name, category, price, desc, photoUrl });
   res.status(201).json(item);
@@ -65,7 +68,12 @@ router.patch("/menu-items/:itemId", requireAuth, requireRole("partner", "admin")
   const { name, category, price, desc, photoUrl, available } = req.body;
   if (name !== undefined) item.name = name;
   if (category !== undefined) item.category = category;
-  if (price !== undefined) item.price = price;
+  if (price !== undefined) {
+    if (typeof price !== "number" || !Number.isFinite(price) || price < 0) {
+      return res.status(400).json({ error: "price must be a non-negative number" });
+    }
+    item.price = price;
+  }
   if (desc !== undefined) item.desc = desc;
   if (photoUrl !== undefined) item.photoUrl = photoUrl;
   if (available !== undefined) item.available = available;

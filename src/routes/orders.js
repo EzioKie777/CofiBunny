@@ -5,6 +5,7 @@ import MenuItem from "../models/MenuItem.js";
 import Cafe from "../models/Cafe.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { computeDelivery } from "../utils/delivery.js";
+import { customerPrice } from "../utils/pricing.js";
 
 const router = Router();
 
@@ -44,7 +45,8 @@ router.post("/", requireAuth, requireRole("customer"), async (req, res) => {
       stopsByCafe[cafeId].push({
         menuItemId: menuItem._id,
         name: menuItem.name,
-        price: menuItem.price,
+        basePrice: menuItem.price,
+        price: customerPrice(menuItem.price),
         qty: Math.max(1, qty | 0),
       });
     }

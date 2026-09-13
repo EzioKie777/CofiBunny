@@ -225,6 +225,7 @@
 .cb-menueditbtn { font-size: 12px; font-weight: 700; color: var(--mocha-900); background: var(--paper); border: 1px solid var(--mocha-600); padding: 6px 12px; border-radius: 999px; }
 .cb-menueditbtn:hover { background: var(--cream-100); }
 .cb-menueditor-error { color: #8A3B2B; font-size: 13px; margin-bottom: 10px; }
+.cb-menueditor-note { color: var(--mocha-600); font-size: 12px; line-height: 1.45; margin: -4px 0 14px; }
 </style>
 </head>
 <body>
@@ -595,6 +596,16 @@ function cartTotals(cart) {
   return cart.reduce((s, i) => s + i.price * i.qty, 0);
 }
 
+function platformMarkup(price) {
+  if (price < 100) return 5;
+  if (price >= 500) return 15;
+  return 10;
+}
+
+function customerPrice(price) {
+  return price + platformMarkup(price);
+}
+
 function getStops(cart) {
   const seen = new Set();
   const order = [];
@@ -730,7 +741,7 @@ function CofiBunnyConnected() {
     setCart((prev) => {
       const existing = prev.find((i) => i.menuItemId === item._id);
       if (existing) return prev.map((i) => (i.menuItemId === item._id ? { ...i, qty: i.qty + 1 } : i));
-      return [...prev, { menuItemId: item._id, cafeId: cafe._id, cafeName: cafe.name, name: item.name, price: item.price, qty: 1 }];
+      return [...prev, { menuItemId: item._id, cafeId: cafe._id, cafeName: cafe.name, name: item.name, price: customerPrice(item.price), qty: 1 }];
     });
   }
   function changeQty(menuItemId, delta) {
@@ -1238,7 +1249,7 @@ function MenuScreen({ data, loading, error, category, setCategory, cart, onAdd, 
                 </div>
               </div>
               <div className="cb-item-side">
-                <span className="cb-item-price">{peso(item.price)}</span>
+                <span className="cb-item-price">{peso(customerPrice(item.price))}</span>
                 {inStock && (
                   qty === 0 ? (
                     <button className="cb-btn-add" onClick={() => onAdd(item)}><Icon name="plus" size={15} /> Add</button>
@@ -1471,7 +1482,7 @@ function OrdersScreen({ orders, loading, recommended, onShop }) {
                 <Icon name="heart" size={16} color="var(--blush-500)" />
                 <h4>{item.name}</h4>
                 <span className="cb-muted">{item.cafeName}</span>
-                <span className="cb-item-price">{peso(item.price)}</span>
+                <span className="cb-item-price">{peso(customerPrice(item.price))}</span>
               </div>
             ))}
           </div>
@@ -1532,7 +1543,7 @@ function PartnerScreen({ data, loading, orders, onToggleAvailability, onCreateMe
   const { cafe, items } = data;
   const revenueToday = orders.reduce((sum, o) => {
     const stop = o.stops.find((s) => String(s.cafeId) === String(cafe._id));
-    return sum + (stop ? stop.items.reduce((a, i) => a + i.price * i.qty, 0) : 0);
+    return sum + (stop ? stop.items.reduce((a, i) => a + (i.basePrice ?? i.price) * i.qty, 0) : 0);
   }, 0);
 
   return (
@@ -1553,6 +1564,7 @@ function PartnerScreen({ data, loading, orders, onToggleAvailability, onCreateMe
       <h2 className="cb-subtitle">Menu &amp; availability</h2>
       <p className="cb-muted" style={{ marginTop: "-2px", marginBottom: "14px" }}>Add a photo for each item — it's the first thing customers see.</p>
       {!addingItem && !editingItem && <button className="cb-btn-primary" style={{ marginBottom: 14 }} onClick={() => setAddingItem(true)}>Add menu item</button>}
+      <p className="cb-menueditor-note">Your menu prices stay yours; Cofi Bunny adds a small platform fee for customers: P5 under P100, P10 from P100, and P15 from P500.</p>
       {addingItem && <PartnerMenuEditor onSave={async (item) => { await onCreateMenuItem(item); setAddingItem(false); }} onCancel={() => setAddingItem(false)} />}
       {editingItem && <PartnerMenuEditor item={editingItem} onSave={async (changes) => { await onUpdateMenuItem(editingItem._id, changes); setEditingItem(null); }} onCancel={() => setEditingItem(null)} />}
       <div className="cb-card">
