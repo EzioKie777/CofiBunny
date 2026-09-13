@@ -196,13 +196,11 @@
   .cb-cartgrid { grid-template-columns: 1fr; }
   .cb-recgrid { grid-template-columns: 1fr; }
   .cb-statrow { grid-template-columns: 1fr; }
+  .cb-menueditor-grid { grid-template-columns: 1fr; gap: 0; }
   .cb-table-head, .cb-table-row { grid-template-columns: 1fr 1fr; }
 }
 
 /* connected-app additions */
-.cb-apifield { margin-bottom: 22px; }
-.cb-apifield input { font-size: 13px; }
-.cb-apifield-hint { font-size: 11.5px; color: var(--mocha-600); line-height: 1.5; margin-top: 6px; }
 .cb-errorbanner { background: #F6E2DE; color: #8A3B2B; border-radius: 12px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
 .cb-divider { display: flex; align-items: center; gap: 10px; margin: 20px 0 14px; color: var(--mocha-600); font-size: 12px; }
 .cb-divider::before, .cb-divider::after { content: ""; flex: 1; height: 1px; background: var(--latte-300); }
@@ -216,6 +214,13 @@
 .cb-adminrow-controls select { border: 1px solid var(--latte-300); border-radius: 8px; padding: 6px 8px; font-size: 13px; background: var(--paper); color: var(--mocha-900); }
 .cb-savebtn { font-size: 12px; font-weight: 700; color: var(--cream); background: var(--sage-500); padding: 6px 12px; border-radius: 999px; }
 .cb-partnernote { display: flex; align-items: center; gap: 6px; }
+.cb-menueditor { margin-bottom: 14px; }
+.cb-menueditor-grid { display: grid; grid-template-columns: 1.2fr 1fr 0.7fr; gap: 12px; }
+.cb-menueditor-grid .cb-field { margin-bottom: 12px; }
+.cb-menueditor-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.cb-menueditbtn { font-size: 12px; font-weight: 700; color: var(--mocha-600); border: 1px solid var(--latte-300); padding: 6px 12px; border-radius: 999px; }
+.cb-menueditbtn:hover { background: var(--cream-100); }
+.cb-menueditor-error { color: #8A3B2B; font-size: 13px; margin-bottom: 10px; }
 </style>
 </head>
 <body>
@@ -627,7 +632,7 @@ function statusColor(status) {
 /* ---------------------------------- app ---------------------------------- */
 
 function CofiBunnyConnected() {
-  const [apiBase, setApiBase] = useState("https://cofibunny.onrender.com/api");
+  const apiBase = "https://cofibunny.onrender.com/api";
   const [token, setToken] = useState(null);
   const [me, setMe] = useState(null);
   const [screen, setScreen] = useState("login");
@@ -789,6 +794,14 @@ function CofiBunnyConnected() {
     const updated = await api(`/cafes/menu-items/${item._id}`, { method: "PATCH", body: { available: !item.available } });
     setPartnerData((prev) => ({ ...prev, items: prev.items.map((i) => (i._id === updated._id ? updated : i)) }));
   }
+  async function createMenuItem(item) {
+    const created = await api(`/cafes/${partnerData.cafe._id}/menu-items`, { method: "POST", body: item });
+    setPartnerData((prev) => ({ ...prev, items: [...prev.items, created] }));
+  }
+  async function updateMenuItem(itemId, changes) {
+    const updated = await api(`/cafes/menu-items/${itemId}`, { method: "PATCH", body: changes });
+    setPartnerData((prev) => ({ ...prev, items: prev.items.map((item) => (item._id === updated._id ? updated : item)) }));
+  }
   function uploadItemPhotoPartner(item, file) {
     readAsDataURL(file, async (dataUrl) => {
       const updated = await api(`/cafes/menu-items/${item._id}`, { method: "PATCH", body: { photoUrl: dataUrl } });
@@ -837,7 +850,7 @@ function CofiBunnyConnected() {
     <div className="cb-root">
       
       {screen === "login" && (
-        <LoginScreen apiBase={apiBase} setApiBase={setApiBase} onAuthed={handleAuthed} />
+        <LoginScreen apiBase={apiBase} onAuthed={handleAuthed} />
       )}
 
       {screen !== "login" && (
@@ -912,6 +925,8 @@ function CofiBunnyConnected() {
                 loading={partnerLoading}
                 orders={incomingOrders}
                 onToggleAvailability={toggleAvailability}
+                onCreateMenuItem={createMenuItem}
+                onUpdateMenuItem={updateMenuItem}
                 onUploadItemPhoto={uploadItemPhotoPartner}
                 onUploadCoverPhoto={uploadCoverPhotoPartner}
                 onMarkReady={markStopReady}
@@ -985,7 +1000,7 @@ function PhotoFrame({ src, onUpload, variant = "item", label = "Add photo" }) {
 
 /* --------------------------------- login ---------------------------------- */
 
-function LoginScreen({ apiBase, setApiBase, onAuthed }) {
+function LoginScreen({ apiBase, onAuthed }) {
   const [mode, setMode] = useState("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -1040,16 +1055,6 @@ function LoginScreen({ apiBase, setApiBase, onAuthed }) {
       </div>
 
       <div className="cb-login-form">
-        <label className="cb-field cb-apifield">
-          <span>API server</span>
-          <input value={apiBase} onChange={(e) => setApiBase(e.target.value)} placeholder="http://localhost:4000/api" />
-          <p className="cb-apifield-hint">
-            Running the backend on your computer and opening this on your phone? Use your computer's
-            local network address instead of "localhost" (e.g. http://192.168.1.23:4000/api), and make
-            sure both devices are on the same Wi-Fi.
-          </p>
-        </label>
-
         <div className="cb-authtabs">
           <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>Log in</button>
           <button className={mode === "signup" ? "active" : ""} onClick={() => setMode("signup")}>Sign up</button>
@@ -1142,8 +1147,7 @@ function Marketplace({ userName, cafes, loading, error, onOpenCafe }) {
       {loading && <p className="cb-loadingrow">Loading cafés…</p>}
       {error && (
         <div className="cb-errorbanner">
-          Couldn't reach the API at this address. Make sure the backend is running, then check the
-          "API server" address on the login screen. ({error})
+          Couldn't reach the configured API. Make sure the backend is running. ({error})
         </div>
       )}
 
@@ -1477,7 +1481,49 @@ function OrdersScreen({ orders, loading, recommended, onShop }) {
 
 /* --------------------------------- partner ----------------------------------- */
 
-function PartnerScreen({ data, loading, orders, onToggleAvailability, onUploadItemPhoto, onUploadCoverPhoto, onMarkReady }) {
+function PartnerMenuEditor({ item, onSave, onCancel }) {
+  const [name, setName] = useState(item?.name || "");
+  const [category, setCategory] = useState(item?.category || "");
+  const [price, setPrice] = useState(item?.price ?? "");
+  const [desc, setDesc] = useState(item?.desc || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!name.trim() || !category.trim() || price === "") {
+      setError("Name, category, and price are required.");
+      return;
+    }
+    setSaving(true); setError(null);
+    try {
+      await onSave({ name: name.trim(), category: category.trim(), price: Number(price), desc: desc.trim() });
+    } catch (err) {
+      setError(err.message);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="cb-card cb-menueditor" onSubmit={submit}>
+      <div className="cb-menueditor-grid">
+        <label className="cb-field"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Iced oat latte" /></label>
+        <label className="cb-field"><span>Category</span><input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Coffee" /></label>
+        <label className="cb-field"><span>Price</span><input type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="150" /></label>
+      </div>
+      <label className="cb-field"><span>Description</span><input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Short description" /></label>
+      {error && <p className="cb-menueditor-error">{error}</p>}
+      <div className="cb-menueditor-actions">
+        <button type="button" className="cb-btn-ghost" onClick={onCancel}>Cancel</button>
+        <button type="submit" className="cb-btn-primary" disabled={saving}>{saving ? "Saving…" : item ? "Save changes" : "Add item"}</button>
+      </div>
+    </form>
+  );
+}
+
+function PartnerScreen({ data, loading, orders, onToggleAvailability, onCreateMenuItem, onUpdateMenuItem, onUploadItemPhoto, onUploadCoverPhoto, onMarkReady }) {
+  const [editingItem, setEditingItem] = useState(null);
+  const [addingItem, setAddingItem] = useState(false);
   if (loading || !data) return <p className="cb-loadingrow">Loading your café…</p>;
   const { cafe, items } = data;
   const revenueToday = orders.reduce((sum, o) => {
@@ -1502,11 +1548,15 @@ function PartnerScreen({ data, loading, orders, onToggleAvailability, onUploadIt
 
       <h2 className="cb-subtitle">Menu &amp; availability</h2>
       <p className="cb-muted" style={{ marginTop: "-2px", marginBottom: "14px" }}>Add a photo for each item — it's the first thing customers see.</p>
+      {!addingItem && !editingItem && <button className="cb-btn-primary" style={{ marginBottom: 14 }} onClick={() => setAddingItem(true)}>Add menu item</button>}
+      {addingItem && <PartnerMenuEditor onSave={async (item) => { await onCreateMenuItem(item); setAddingItem(false); }} onCancel={() => setAddingItem(false)} />}
+      {editingItem && <PartnerMenuEditor item={editingItem} onSave={async (changes) => { await onUpdateMenuItem(editingItem._id, changes); setEditingItem(null); }} onCancel={() => setEditingItem(null)} />}
       <div className="cb-card">
         {items.map((item) => (
           <div key={item._id} className="cb-availrow">
             <PhotoFrame variant="item" src={item.photoUrl} onUpload={(file) => onUploadItemPhoto(item, file)} />
             <div className="cb-availrow-info"><h4>{item.name}</h4><span className="cb-muted">{peso(item.price)}</span></div>
+            <button className="cb-menueditbtn" onClick={() => { setEditingItem(item); setAddingItem(false); }}>Edit</button>
             <button className="cb-toggle" onClick={() => onToggleAvailability(item)}>
               {item.available ? <Icon name="toggleRight" size={30} color="var(--mocha-600)" /> : <Icon name="toggleLeft" size={30} color="var(--latte-300)" />}
               <span>{item.available ? "Available" : "Sold out"}</span>
