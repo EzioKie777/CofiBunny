@@ -114,6 +114,12 @@
 .cb-feedback-panel textarea, .cb-feedback-panel select { width: 100%; padding: 12px 14px; border: 1px solid var(--latte-300); border-radius: 12px; background: var(--paper); color: var(--mocha-900); font: inherit; }
 .cb-feedback-panel textarea { min-height: 110px; resize: vertical; }
 .cb-feedback-success { padding: 12px; border-radius: 12px; background: #E4EBDF; color: var(--sage-500); font-size: 13px; }
+.cb-feedback-success-panel { text-align: center; padding: 18px 8px 6px; }
+.cb-feedback-success-icon { width: 56px; height: 56px; margin: 0 auto 14px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #E4EBDF; color: var(--sage-500); }
+.cb-feedback-success-panel h2 { font-size: 25px; margin-bottom: 8px; }
+.cb-feedback-success-panel p { color: var(--mocha-600); line-height: 1.55; font-size: 14px; margin-bottom: 20px; }
+.cb-feedback-success-panel .cb-feedback-success-note { color: var(--sage-500); font-size: 12px; margin: -8px 0 22px; }
+.cb-feedback-search { width: 100%; padding: 12px 14px; border: 1px solid var(--latte-300); border-radius: 12px; background: var(--paper); color: var(--mocha-900); font: inherit; }
 .cb-item-rating { margin-top: 7px; }
 .cb-feedback-filters { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0 16px; }
 .cb-feedback-filters button { padding: 7px 12px; border: 1px solid var(--latte-300); border-radius: 999px; color: var(--mocha-600); background: var(--paper); font-size: 12px; text-transform: capitalize; }
@@ -808,8 +814,6 @@ function CofiBunnyConnected() {
 
   async function submitFeedback(payload) {
     await api("/feedback", { method: "POST", body: payload });
-    setFeedbackOpen(false);
-    window.alert("Thanks. Your feedback has been sent to the review queue.");
   }
 
   // ---- orders / recommendations ----
@@ -1591,17 +1595,23 @@ function OrdersScreen({ orders, loading, recommended, onShop }) {
 function FeedbackModal({ cafes, items, onClose, onSubmit }) {
   const [targetType, setTargetType] = useState("service");
   const [targetId, setTargetId] = useState("");
+  const [targetCafeId, setTargetCafeId] = useState("");
+  const [itemSearch, setItemSearch] = useState("");
   const [category, setCategory] = useState("quality");
   const [details, setDetails] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [submitted, setSubmitted] = useState(false);
+
+  const cafeItems = items.filter((item) => String(item.cafeId) === String(targetCafeId));
+  const filteredItems = cafeItems.filter((item) => item.name.toLowerCase().includes(itemSearch.trim().toLowerCase()));
 
   async function submit(event) {
     event.preventDefault();
     if (details.trim().length < 10) return setError("Please share at least 10 characters.");
     if (targetType !== "service" && !targetId) return setError("Choose what you are reporting.");
     setSaving(true); setError(null);
-    try { await onSubmit({ targetType, targetId: targetType === "service" ? null : targetId, category, details: details.trim() }); }
+    try { await onSubmit({ targetType, targetId: targetType === "service" ? null : targetId, category, details: details.trim() }); setSubmitted(true); }
     catch (submitError) { setError(submitError.message); }
     finally { setSaving(false); }
   }
@@ -1610,13 +1620,27 @@ function FeedbackModal({ cafes, items, onClose, onSubmit }) {
     <div className="cb-feedback-modal" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <form className="cb-feedback-panel" onSubmit={submit}>
         <div className="cb-feedback-head"><div><h2>Share feedback</h2><p className="cb-muted">Help us keep every hop thoughtful.</p></div><button type="button" className="cb-feedback-close" onClick={onClose}>×</button></div>
-        <label className="cb-field"><span>What is this about?</span><select value={targetType} onChange={(event) => { setTargetType(event.target.value); setTargetId(""); }}><option value="service">Cofi Bunny service</option><option value="cafe">A café</option><option value="menuItem">A menu item</option></select></label>
-        {targetType === "cafe" && <label className="cb-field"><span>Café</span><select value={targetId} onChange={(event) => setTargetId(event.target.value)}><option value="">Choose a café…</option>{cafes.map((cafe) => <option key={cafe._id} value={cafe._id}>{cafe.name}</option>)}</select></label>}
-        {targetType === "menuItem" && <label className="cb-field"><span>Menu item and café</span><select value={targetId} onChange={(event) => setTargetId(event.target.value)}><option value="">Choose an item…</option>{items.map((item) => <option key={item._id} value={item._id}>{item.name} · {item.cafeName || "Café"}</option>)}</select></label>}
-        <label className="cb-field"><span>Category</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option value="quality">Quality</option><option value="safety">Safety concern</option><option value="misleading">Misleading information</option><option value="order">Order issue</option><option value="delivery">Delivery issue</option><option value="staff">Staff experience</option><option value="other">Other</option></select></label>
-        <label className="cb-field"><span>Details</span><textarea value={details} onChange={(event) => setDetails(event.target.value)} placeholder="Tell us what happened…" required /></label>
-        {error && <div className="cb-errorbanner">{error}</div>}
-        <button className="cb-btn-primary cb-fullwidth" disabled={saving}>{saving ? "Sending…" : "Send feedback"}</button>
+        {submitted ? (
+          <div className="cb-feedback-success-panel">
+            <div className="cb-feedback-success-icon"><Icon name="check" size={28} /></div>
+            <h2>Thank you for your valuable feedback</h2>
+            <p>Your message has been received by the Cofi Bunny team. We’ll review it carefully and use it to make every café experience better.</p>
+            <p className="cb-feedback-success-note">Your feedback is now in our review queue.</p>
+            <button type="button" className="cb-btn-primary" onClick={onClose}>Done</button>
+          </div>
+        ) : <>
+          <label className="cb-field"><span>What is this about?</span><select value={targetType} onChange={(event) => { setTargetType(event.target.value); setTargetId(""); setTargetCafeId(""); setItemSearch(""); }}><option value="service">Cofi Bunny service</option><option value="cafe">A café</option><option value="menuItem">A menu item</option></select></label>
+          {targetType === "cafe" && <label className="cb-field"><span>Café</span><select value={targetId} onChange={(event) => setTargetId(event.target.value)}><option value="">Choose a café…</option>{cafes.map((cafe) => <option key={cafe._id} value={cafe._id}>{cafe.name}</option>)}</select></label>}
+          {targetType === "menuItem" && <>
+            <label className="cb-field"><span>First choose the café</span><select value={targetCafeId} onChange={(event) => { setTargetCafeId(event.target.value); setTargetId(""); setItemSearch(""); }}><option value="">Choose a café…</option>{cafes.map((cafe) => <option key={cafe._id} value={cafe._id}>{cafe.name}</option>)}</select></label>
+            {targetCafeId && <label className="cb-field"><span>Search products from {cafes.find((cafe) => cafe._id === targetCafeId)?.name || "this café"}</span><input className="cb-feedback-search" value={itemSearch} onChange={(event) => { setItemSearch(event.target.value); setTargetId(""); }} placeholder="Type a product name…" /></label>}
+            {targetCafeId && <label className="cb-field"><span>Menu item</span><select value={targetId} onChange={(event) => setTargetId(event.target.value)}><option value="">Choose an item…</option>{filteredItems.map((item) => <option key={item._id} value={item._id}>{item.name}</option>)}</select>{filteredItems.length === 0 && <span className="cb-muted">No products match that search.</span>}</label>}
+          </>}
+          <label className="cb-field"><span>Category</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option value="quality">Quality</option><option value="safety">Safety concern</option><option value="misleading">Misleading information</option><option value="order">Order issue</option><option value="delivery">Delivery issue</option><option value="staff">Staff experience</option><option value="other">Other</option></select></label>
+          <label className="cb-field"><span>Details</span><textarea value={details} onChange={(event) => setDetails(event.target.value)} placeholder="Tell us what happened…" required /></label>
+          {error && <div className="cb-errorbanner">{error}</div>}
+          <button className="cb-btn-primary cb-fullwidth" disabled={saving}>{saving ? "Sending…" : "Send feedback"}</button>
+        </>}
       </form>
     </div>
   );
