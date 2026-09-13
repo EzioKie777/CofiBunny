@@ -216,6 +216,18 @@
 .cb-adminrow-controls select { border: 1px solid var(--latte-300); border-radius: 8px; padding: 6px 8px; font-size: 13px; background: var(--paper); color: var(--mocha-900); }
 .cb-savebtn { font-size: 12px; font-weight: 700; color: var(--cream); background: var(--sage-500); padding: 6px 12px; border-radius: 999px; }
 .cb-partnernote { display: flex; align-items: center; gap: 6px; }
+.cb-menu-editor { display: grid; gap: 12px; margin-top: 14px; }
+.cb-menu-editor-grid { display: grid; grid-template-columns: 1.4fr 1fr 0.7fr; gap: 10px; }
+.cb-menu-editor input, .cb-menu-editor textarea { width: 100%; border: 1px solid var(--latte-300); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--mocha-900); background: var(--paper); }
+.cb-menu-editor textarea { min-height: 62px; resize: vertical; }
+.cb-menu-editor-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.cb-menu-editor-error { color: #8A3B2B; font-size: 12px; }
+.cb-menu-item-edit { display: grid; gap: 10px; width: 100%; }
+.cb-menu-item-edit-actions { display: flex; align-items: center; gap: 8px; }
+@media (max-width: 620px) {
+  .cb-menu-editor-grid { grid-template-columns: 1fr; }
+  .cb-menu-item-edit-actions { flex-wrap: wrap; }
+}
 </style>
 </head>
 <body>
@@ -801,6 +813,14 @@ function CofiBunnyConnected() {
       setPartnerData((prev) => ({ ...prev, cafe: updated }));
     });
   }
+  async function createMenuItem(cafeId, item) {
+    const created = await api(`/cafes/${cafeId}/menu-items`, { method: "POST", body: item });
+    setPartnerData((prev) => ({ ...prev, items: [...prev.items, created].sort((a, b) => `${a.category}${a.name}`.localeCompare(`${b.category}${b.name}`)) }));
+  }
+  async function updateMenuItem(itemId, changes) {
+    const updated = await api(`/cafes/menu-items/${itemId}`, { method: "PATCH", body: changes });
+    setPartnerData((prev) => ({ ...prev, items: prev.items.map((item) => item._id === updated._id ? updated : item) }));
+  }
   async function markStopReady(orderId) {
     const updated = await api(`/orders/${orderId}/ready`, { method: "PATCH" });
     setIncomingOrders((prev) => prev.map((o) => (o._id === updated._id ? updated : o)).filter((o) => o.status !== "delivered"));
@@ -914,6 +934,8 @@ function CofiBunnyConnected() {
                 onToggleAvailability={toggleAvailability}
                 onUploadItemPhoto={uploadItemPhotoPartner}
                 onUploadCoverPhoto={uploadCoverPhotoPartner}
+                onCreateMenuItem={createMenuItem}
+                onUpdateMenuItem={updateMenuItem}
                 onMarkReady={markStopReady}
               />
             )}
@@ -1477,7 +1499,116 @@ function OrdersScreen({ orders, loading, recommended, onShop }) {
 
 /* --------------------------------- partner ----------------------------------- */
 
-function PartnerScreen({ data, loading, orders, onToggleAvailability, onUploadItemPhoto, onUploadCoverPhoto, onMarkReady }) {
+function MenuItemForm({ cafeId, onCreate, onCancel }) {
+  const [form, setForm] = useState({ name: "", category: "", price: "", desc: "", photoUrl: "" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function submit(e) {
+    e.preventDefault();
+    setError(null);
+    if (!form.name.trim() || !form.category.trim() || form.price === "") {
+      setError("Name, category, and price are required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await onCreate(cafeId, { ...form, name: form.name.trim(), category: form.category.trim(), price: Number(form.price) });
+      setForm({ name: "", category: "", price: "", desc: "", photoUrl: "" });
+      onCancel();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function uploadPhoto(file) {
+    readAsDataURL(file, (photoUrl) => setForm((prev) => ({ ...prev, photoUrl })));
+  }
+
+  return (
+    <form className="cb-menu-editor" onSubmit={submit}>
+      <div className="cb-menu-editor-grid">
+        <input aria-label="Menu item name" placeholder="Item name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        <input aria-label="Menu item category" placeholder="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+        <input aria-label="Menu item price" type="number" min="0" step="1" placeholder="Price" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+      </div>
+      <textarea aria-label="Menu item description" placeholder="Short description" value={form.desc} onChange={(e) => setForm({ ...form, desc: e.target.value })} />
+      <div className="cb-menu-editor-actions">
+        <PhotoFrame variant="item" src={form.photoUrl} onUpload={uploadPhoto} label="Add photo" />
+        <div className="cb-menu-item-edit-actions">
+          {error && <span className="cb-menu-editor-error">{error}</span>}
+          <button type="button" className="cb-btn-ghost" onClick={onCancel}>Cancel</button>
+          <button type="submit" className="cb-btn-primary" disabled={saving}>{saving ? "Adding…" : "Add item"}</button>
+        </div>
+      </div>
+    </form>
+  );
+}
+
+function EditableMenuItem({ item, onUpdate }) {
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ name: item.name, category: item.category, price: item.price, desc: item.desc || "" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function save(e) {
+    e.preventDefault();
+    setError(null);
+    if (!form.name.trim() || !form.category.trim() || form.price === "") {
+      setError("Name, category, and price are required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await onUpdate(item._id, { ...form, name: form.name.trim(), category: form.category.trim(), price: Number(form.price) });
+      setEditing(false);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function uploadPhoto(file) {
+    readAsDataURL(file, async (photoUrl) => {
+      try { await onUpdate(item._id, { photoUrl }); } catch (err) { setError(err.message); }
+    });
+  }
+
+  if (!editing) {
+    return (
+      <>
+        <PhotoFrame variant="item" src={item.photoUrl} onUpload={uploadPhoto} />
+        <div className="cb-availrow-info"><h4>{item.name}</h4><span className="cb-muted">{item.category} · {peso(item.price)}</span><br /><span className="cb-muted">{item.desc || "No description"}</span></div>
+        <button className="cb-btn-ghost" onClick={() => setEditing(true)}>Edit</button>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <PhotoFrame variant="item" src={item.photoUrl} onUpload={uploadPhoto} />
+      <form className="cb-menu-item-edit" onSubmit={save}>
+        <div className="cb-menu-editor-grid">
+          <input aria-label={`${item.name} name`} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <input aria-label={`${item.name} category`} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+          <input aria-label={`${item.name} price`} type="number" min="0" step="1" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+        </div>
+        <textarea aria-label={`${item.name} description`} value={form.desc} onChange={(e) => setForm({ ...form, desc: e.target.value })} />
+        <div className="cb-menu-item-edit-actions">
+          {error && <span className="cb-menu-editor-error">{error}</span>}
+          <button type="button" className="cb-btn-ghost" onClick={() => setEditing(false)}>Cancel</button>
+          <button type="submit" className="cb-btn-primary" disabled={saving}>{saving ? "Saving…" : "Save changes"}</button>
+        </div>
+      </form>
+    </>
+  );
+}
+
+function PartnerScreen({ data, loading, orders, onToggleAvailability, onUploadItemPhoto, onUploadCoverPhoto, onCreateMenuItem, onUpdateMenuItem, onMarkReady }) {
+  const [addingItem, setAddingItem] = useState(false);
   if (loading || !data) return <p className="cb-loadingrow">Loading your café…</p>;
   const { cafe, items } = data;
   const revenueToday = orders.reduce((sum, o) => {
@@ -1503,10 +1634,11 @@ function PartnerScreen({ data, loading, orders, onToggleAvailability, onUploadIt
       <h2 className="cb-subtitle">Menu &amp; availability</h2>
       <p className="cb-muted" style={{ marginTop: "-2px", marginBottom: "14px" }}>Add a photo for each item — it's the first thing customers see.</p>
       <div className="cb-card">
+        <button className="cb-btn-primary" onClick={() => setAddingItem((current) => !current)}>{addingItem ? "Close editor" : "+ Add menu item"}</button>
+        {addingItem && <MenuItemForm cafeId={cafe._id} onCreate={onCreateMenuItem} onCancel={() => setAddingItem(false)} />}
         {items.map((item) => (
           <div key={item._id} className="cb-availrow">
-            <PhotoFrame variant="item" src={item.photoUrl} onUpload={(file) => onUploadItemPhoto(item, file)} />
-            <div className="cb-availrow-info"><h4>{item.name}</h4><span className="cb-muted">{peso(item.price)}</span></div>
+            <EditableMenuItem item={item} onUpdate={onUpdateMenuItem} />
             <button className="cb-toggle" onClick={() => onToggleAvailability(item)}>
               {item.available ? <Icon name="toggleRight" size={30} color="var(--mocha-600)" /> : <Icon name="toggleLeft" size={30} color="var(--latte-300)" />}
               <span>{item.available ? "Available" : "Sold out"}</span>
