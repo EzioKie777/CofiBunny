@@ -937,6 +937,16 @@ function CofiBunnyConnected() {
       }).catch(() => {});
     }
   }, [screen]);
+  // Poll while this screen is open so a status change (e.g. a café marking
+  // your order ready) shows up without you having to leave and come back.
+  useEffect(() => {
+    if (screen !== "orders" || !token) return;
+    const interval = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      api("/orders/mine").then(setMyOrders).catch(() => {});
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [screen, token]);
 
   const recommended = useMemo(() => {
     const counts = {};
@@ -962,6 +972,16 @@ function CofiBunnyConnected() {
       .catch(() => {})
       .finally(() => setPartnerLoading(false));
   }, [screen]);
+  // Poll just the order queue (not the menu/photos) so a new order shows up
+  // live while you're sitting on this screen, without re-fetching everything.
+  useEffect(() => {
+    if (screen !== "partner" || !me?.cafeId) return;
+    const interval = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      api("/orders/incoming").then(setIncomingOrders).catch(() => {});
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [screen, me?.cafeId]);
 
   async function toggleAvailability(item) {
     const updated = await api(`/cafes/menu-items/${item._id}`, { method: "PATCH", body: { available: !item.available } });
@@ -1006,6 +1026,16 @@ function CofiBunnyConnected() {
     api("/admin/menu-items?status=pending").then(setModerationItems).catch(() => {});
     api(`/admin/feedback?status=${adminFeedbackStatus}`).then(setAdminFeedback).catch(() => {});
   }, [screen, adminFeedbackStatus]);
+  // Poll the live-orders panel specifically — the rest of the admin screen
+  // (users, café roster) changes rarely enough that polling it isn't worth it.
+  useEffect(() => {
+    if (screen !== "admin") return;
+    const interval = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      api("/orders/active").then(setActiveOrders).catch(() => {});
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [screen]);
   useEffect(() => {
     if (screen !== "admin") return;
     const t = setTimeout(loadAdminUsers, 350);
