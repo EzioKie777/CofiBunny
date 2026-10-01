@@ -814,12 +814,41 @@ function CofiBunnyConnected() {
   }
   function logout() {
     setToken(null); setMe(null); setCart([]); setScreen("login");
+    setPushEnabled(false);
   }
 
   // ---- push notifications ----
   const [notifStatus, setNotifStatus] = useState(
     typeof Notification !== "undefined" ? Notification.permission : "unsupported"
   );
+  const [pushEnabled, setPushEnabled] = useState(false);
+
+  useEffect(() => {
+    if (!token || typeof Notification === "undefined" || Notification.permission !== "granted" || !("serviceWorker" in navigator)) {
+      setPushEnabled(false);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+        if (!subscription) {
+          if (!cancelled) setPushEnabled(false);
+          return;
+        }
+        await api("/push/subscribe", { method: "POST", body: subscription.toJSON() });
+        if (!cancelled) setPushEnabled(true);
+      } catch (err) {
+        console.warn("Syncing push subscription failed:", err.message);
+        if (!cancelled) setPushEnabled(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [token]);
+
   async function enableNotifications() {
     if (typeof Notification === "undefined" || !("serviceWorker" in navigator)) {
       setNotifStatus("unsupported");
@@ -840,8 +869,10 @@ function CofiBunnyConnected() {
         });
       }
       await api("/push/subscribe", { method: "POST", body: subscription.toJSON() });
+      setPushEnabled(true);
     } catch (err) {
       console.warn("Enabling notifications failed:", err.message);
+      setPushEnabled(false);
     }
   }
 
@@ -1080,6 +1111,7 @@ function CofiBunnyConnected() {
             onOrders={() => setScreen("orders")}
             onLogout={logout}
             notifStatus={notifStatus}
+            pushEnabled={pushEnabled}
             onEnableNotifications={enableNotifications}
           />
 
@@ -1335,7 +1367,7 @@ function LoginScreen({ apiBase, onAuthed }) {
 
 /* --------------------------------- top nav --------------------------------- */
 
-function TopNav({ me, cartCount, onCart, onLogo, onOrders, onLogout, notifStatus, onEnableNotifications }) {
+function TopNav({ me, cartCount, onCart, onLogo, onOrders, onLogout, notifStatus, pushEnabled, onEnableNotifications }) {
   return (
     <header className="cb-nav">
       <button className="cb-nav-logo" onClick={onLogo}>
@@ -1345,7 +1377,7 @@ function TopNav({ me, cartCount, onCart, onLogo, onOrders, onLogout, notifStatus
 
       <div className="cb-nav-right">
         {me && <span className="cb-rolebadge">{me.role}</span>}
-        {notifStatus !== "unsupported" && notifStatus !== "granted" && (
+        {notifStatus !== "unsupported" && !pushEnabled && (
           <button
             className="cb-icon-btn"
             onClick={onEnableNotifications}
@@ -1354,7 +1386,7 @@ function TopNav({ me, cartCount, onCart, onLogo, onOrders, onLogout, notifStatus
             <Icon name="bell" size={17} />
           </button>
         )}
-        {notifStatus === "granted" && (
+        {pushEnabled && (
           <span className="cb-icon-btn cb-notif-on" title="Notifications are on">
             <Icon name="bell" size={17} />
           </span>
