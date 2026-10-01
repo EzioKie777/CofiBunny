@@ -15,7 +15,7 @@ router.get("/", async (_req, res) => {
 router.get("/:id", async (req, res) => {
   const cafe = await Cafe.findById(req.params.id);
   if (!cafe) return res.status(404).json({ error: "Café not found" });
-  const items = await MenuItem.find({ cafeId: cafe._id }).sort({ category: 1, name: 1 });
+  const items = await MenuItem.find({ cafeId: cafe._id, approvalStatus: "approved" }).sort({ category: 1, name: 1 });
   res.json({ cafe, items });
 });
 
@@ -49,7 +49,15 @@ router.post("/:id/menu-items", requireAuth, requireRole("partner", "admin"), asy
     return res.status(400).json({ error: "name, category, and price are required" });
   }
 
-  const item = await MenuItem.create({ cafeId: cafe._id, name, category, price, desc, photoUrl });
+  const item = await MenuItem.create({
+    cafeId: cafe._id,
+    name,
+    category,
+    price,
+    desc,
+    photoUrl,
+    approvalStatus: "pending",
+  });
   res.status(201).json(item);
 });
 

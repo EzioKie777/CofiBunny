@@ -23,9 +23,9 @@ router.post("/", requireAuth, requireRole("customer"), async (req, res) => {
     }
 
     const menuItemIds = items.map((i) => i.menuItemId);
-    const menuItems = await MenuItem.find({ _id: { $in: menuItemIds } });
+    const menuItems = await MenuItem.find({ _id: { $in: menuItemIds }, approvalStatus: "approved" });
     if (menuItems.length !== items.length) {
-      return res.status(400).json({ error: "One or more menu items were not found" });
+      return res.status(400).json({ error: "One or more menu items were not found or are not available for purchase" });
     }
     const unavailable = menuItems.filter((m) => !m.available);
     if (unavailable.length) {

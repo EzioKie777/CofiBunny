@@ -1,6 +1,7 @@
 import { Router } from "express";
 import User from "../models/User.js";
 import Cafe from "../models/Cafe.js";
+import MenuItem from "../models/MenuItem.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 
 const router = Router();
@@ -58,6 +59,30 @@ router.patch("/users/:id/role", async (req, res) => {
 router.get("/cafes", async (_req, res) => {
   const cafes = await Cafe.find().populate("ownerId", "name email").sort({ name: 1 });
   res.json(cafes);
+});
+
+router.get("/menu-items", async (req, res) => {
+  const status = req.query.status;
+  const filter = status ? { approvalStatus: status } : {};
+
+  const items = await MenuItem.find(filter).sort({ createdAt: -1 });
+  res.json(items);
+});
+
+router.patch("/menu-items/:itemId/review", async (req, res) => {
+  const { decision } = req.body;
+  if (!["approved", "rejected"].includes(decision)) {
+    return res.status(400).json({ error: "decision must be 'approved' or 'rejected'" });
+  }
+
+  const item = await MenuItem.findById(req.params.itemId);
+  if (!item) return res.status(404).json({ error: "Menu item not found" });
+
+  item.approvalStatus = decision;
+  item.available = decision === "approved" ? item.available : false;
+  await item.save();
+
+  res.json(item);
 });
 
 export default router;
