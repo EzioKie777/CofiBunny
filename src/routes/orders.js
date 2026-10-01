@@ -5,7 +5,7 @@ import MenuItem from "../models/MenuItem.js";
 import Cafe from "../models/Cafe.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { computeDelivery } from "../utils/delivery.js";
-import { customerPrice } from "../utils/pricing.js";
+import { notifyUser, notifyCafePartners } from "../utils/push.js";
 
 const router = Router();
 
@@ -27,7 +27,7 @@ router.post("/", requireAuth, requireRole("customer"), async (req, res) => {
     if (menuItems.length !== items.length) {
       return res.status(400).json({ error: "One or more menu items were not found" });
     }
-    const unavailable = menuItems.filter((m) => !m.available || (m.approvalStatus && m.approvalStatus !== "approved"));
+    const unavailable = menuItems.filter((m) => !m.available);
     if (unavailable.length) {
       return res.status(400).json({ error: `Sold out right now: ${unavailable.map((m) => m.name).join(", ")}` });
     }
@@ -45,8 +45,7 @@ router.post("/", requireAuth, requireRole("customer"), async (req, res) => {
       stopsByCafe[cafeId].push({
         menuItemId: menuItem._id,
         name: menuItem.name,
-        basePrice: menuItem.price,
-        price: customerPrice(menuItem.price),
+        price: menuItem.price,
         qty: Math.max(1, qty | 0),
       });
     }
@@ -75,6 +74,15 @@ router.post("/", requireAuth, requireRole("customer"), async (req, res) => {
     });
 
     res.status(201).json(order);
+
+    // Fire-and-forget: don't make the customer wait on push delivery.
+    notifyCafePartners(cafeOrder, {
+      title: "New order — Cofi Bunny",
+      body: stops.length > 1
+        ? `An order needs items from your café (part of a ${stops.length}-café hop).`
+        : "You've got a new order to prepare.",
+      url: "/",
+    }).catch((err) => console.warn("notifyCafePartners failed:", err.message));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -113,9 +121,18 @@ router.patch("/:id/ready", requireAuth, requireRole("partner"), async (req, res)
   if (!stop) return res.status(403).json({ error: "This order has nothing from your café" });
 
   stop.ready = true;
-  if (order.stops.every((s) => s.ready)) order.status = "shipping";
+  const justStartedShipping = order.stops.every((s) => s.ready) && order.status !== "shipping";
+  if (justStartedShipping) order.status = "shipping";
   await order.save();
   res.json(order);
+
+  if (justStartedShipping) {
+    notifyUser(order.userId, {
+      title: "Your order is on the way — Cofi Bunny",
+      body: "Your rider has picked everything up and is heading your way.",
+      url: "/",
+    }).catch((err) => console.warn("notifyUser failed:", err.message));
+  }
 });
 
 // Admin: force a status change (used for the "mark delivered" / demo actions).
@@ -131,6 +148,14 @@ router.patch("/:id/status", requireAuth, requireRole("admin"), async (req, res) 
   );
   if (!order) return res.status(404).json({ error: "Order not found" });
   res.json(order);
+
+  if (status === "shipping" || status === "delivered") {
+    notifyUser(order.userId, {
+      title: status === "shipping" ? "Your order is on the way — Cofi Bunny" : "Order delivered — Cofi Bunny",
+      body: status === "shipping" ? "Your rider is heading your way." : "Enjoy! Let us know how it was.",
+      url: "/",
+    }).catch((err) => console.warn("notifyUser failed:", err.message));
+  }
 });
 
 export default router;

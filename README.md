@@ -85,9 +85,8 @@ curl -X POST http://localhost:4000/api/orders \
 | GET | `/api/cafes` | anyone | list active cafés |
 | GET | `/api/cafes/:id` | anyone | one café + its menu |
 | PATCH | `/api/cafes/:id` | partner (own café) / admin | update tagline, cover photo, etc. |
-| POST | `/api/cafes/:id/menu-items` | partner (own café) / admin | add a validated menu item; new/untrusted submissions wait for approval |
-| PATCH | `/api/cafes/menu-items/:itemId` | partner (own café) / admin | edit price, photo, availability; content edits are revalidated |
-| POST | `/api/cafes/menu-items/:itemId/reports` | customer | flag a suspicious published item |
+| POST | `/api/cafes/:id/menu-items` | partner (own café) / admin | add a menu item |
+| PATCH | `/api/cafes/menu-items/:itemId` | partner (own café) / admin | edit price, photo, availability |
 | POST | `/api/orders` | customer | place a multi-café order |
 | GET | `/api/orders/mine` | customer | your order history |
 | GET | `/api/orders/incoming` | partner | orders touching your café |
@@ -96,20 +95,7 @@ curl -X POST http://localhost:4000/api/orders \
 | PATCH | `/api/orders/:id/status` | admin | force a status change |
 | GET | `/api/admin/users` | admin | list everyone |
 | PATCH | `/api/admin/users/:id/role` | admin | change someone's role |
-| PATCH | `/api/admin/users/:id/trust` | admin | set `new`, `trusted`, or `restricted` partner trust tier |
 | GET | `/api/admin/cafes` | admin | list cafés with owners |
-| GET | `/api/admin/menu-items?status=pending` | admin | review pending or reported items |
-| PATCH | `/api/admin/menu-items/:itemId/review` | admin | approve or reject a menu item |
-| GET | `/api/admin/menu-reports` | admin | inspect open customer reports |
-| POST | `/api/ratings` | customer | rate a café or menu item from 1 to 5 |
-| POST | `/api/feedback` | customer | report a café, menu item, or customer service issue |
-| GET | `/api/admin/feedback` | admin | filtered feedback queue with status/category counts |
-| PATCH | `/api/admin/feedback/:id` | admin | assign, prioritize, resolve, or dismiss feedback |
-
-Menu submissions must use prices from P20 to P1000, a 12–300 character description,
-and clean text. Trusted partners with no automated risk flags publish immediately;
-new or restricted partners are held for admin review. Prices above P500 are flagged
-for review, and two independent customer reports hide a published item until review.
 
 ## How photos work right now
 

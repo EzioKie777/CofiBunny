@@ -6,7 +6,7 @@ import authRoutes from "./routes/auth.js";
 import cafeRoutes from "./routes/cafes.js";
 import orderRoutes from "./routes/orders.js";
 import adminRoutes from "./routes/admin.js";
-import feedbackRoutes from "./routes/feedback.js";
+import pushRoutes from "./routes/push.js";
 
 const app = express();
 app.use(cors());
@@ -18,7 +18,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/cafes", cafeRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/admin", adminRoutes);
-app.use("/api", feedbackRoutes);
+app.use("/api/push", pushRoutes);
 
 // Fallback error handler so unexpected errors return JSON, not an HTML stack trace.
 app.use((err, _req, res, _next) => {
