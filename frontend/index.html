@@ -2,8 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Cofi Bunny</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#3E2B21">
+<link rel="icon" href="favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cofi Bunny">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -109,6 +119,7 @@
 .cb-roleswitch select { border: none; background: none; font-size: 13px; color: var(--mocha-900); font-weight: 600; }
 .cb-icon-btn { position: relative; width: 40px; height: 40px; border-radius: 999px; background: var(--paper); border: 1.5px solid var(--latte-300); display: flex; align-items: center; justify-content: center; color: var(--mocha-900); box-shadow: var(--shadow-xs); }
 .cb-icon-btn:hover { background: var(--mocha-900); color: var(--cream); border-color: var(--mocha-900); transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+.cb-notif-on { color: var(--gold-600); background: var(--gold-100); border-color: var(--gold-100); cursor: default; }
 .cb-badge { position: absolute; top: -5px; right: -5px; background: var(--rust-600); color: white; font-size: 10px; font-weight: 800; border-radius: 999px; min-width: 17px; height: 17px; display: flex; align-items: center; justify-content: center; padding: 0 4px; box-shadow: 0 0 0 2px var(--cream); animation: cbPop .4s var(--ease); }
 
 .cb-main { padding-top: 10px; animation: cbFadeInUp .4s var(--ease); }
@@ -651,6 +662,7 @@ function Icon({ name, size = 18, color = "currentColor", fill = "none", style = 
     case "toggleRight": return <svg {...p}><rect x="2" y="6" width="20" height="12" rx="6"/><circle cx="16" cy="12" r="3.2" fill={color} stroke="none"/></svg>;
     case "truck": return <svg {...p}><rect x="1" y="7" width="14" height="10" rx="1"/><path d="M15 10h3l3 3v4h-6"/><circle cx="6" cy="19" r="1.6"/><circle cx="17" cy="19" r="1.6"/></svg>;
     case "camera": return <svg {...p}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></svg>;
+    case "bell": return <svg {...p}><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>;
     default: return null;
   }
 }
@@ -674,6 +686,17 @@ function readAsDataURL(file, cb) {
   const reader = new FileReader();
   reader.onload = () => cb(reader.result);
   reader.readAsDataURL(file);
+}
+
+// Push subscriptions need the VAPID public key as a Uint8Array, not the
+// base64url string the server hands back — this is the standard conversion.
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
 }
 
 function cartTotals(cart) {
@@ -791,6 +814,35 @@ function CofiBunnyConnected() {
   }
   function logout() {
     setToken(null); setMe(null); setCart([]); setScreen("login");
+  }
+
+  // ---- push notifications ----
+  const [notifStatus, setNotifStatus] = useState(
+    typeof Notification !== "undefined" ? Notification.permission : "unsupported"
+  );
+  async function enableNotifications() {
+    if (typeof Notification === "undefined" || !("serviceWorker" in navigator)) {
+      setNotifStatus("unsupported");
+      return;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      setNotifStatus(permission);
+      if (permission !== "granted") return;
+
+      const { publicKey } = await apiCall(apiBase, "/push/vapid-public-key");
+      const registration = await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        });
+      }
+      await api("/push/subscribe", { method: "POST", body: subscription.toJSON() });
+    } catch (err) {
+      console.warn("Enabling notifications failed:", err.message);
+    }
   }
 
   // ---- marketplace ----
@@ -997,6 +1049,8 @@ function CofiBunnyConnected() {
             onLogo={() => setScreen(me.role === "customer" ? "market" : me.role)}
             onOrders={() => setScreen("orders")}
             onLogout={logout}
+            notifStatus={notifStatus}
+            onEnableNotifications={enableNotifications}
           />
 
           <main className="cb-main" key={screen}>
@@ -1189,7 +1243,7 @@ function LoginScreen({ apiBase, onAuthed }) {
     <div className="cb-login">
       <div className="cb-login-brand">
         <div className="cb-login-brandtop">
-          <BunnyMark size={100} />
+          <BunnyMark size={34} />
           <span className="cb-wordmark">Cofi Bunny</span>
         </div>
         <h1 className="cb-login-headline">Hop between your favorite little cafés — in one order.</h1>
@@ -1251,16 +1305,30 @@ function LoginScreen({ apiBase, onAuthed }) {
 
 /* --------------------------------- top nav --------------------------------- */
 
-function TopNav({ me, cartCount, onCart, onLogo, onOrders, onLogout }) {
+function TopNav({ me, cartCount, onCart, onLogo, onOrders, onLogout, notifStatus, onEnableNotifications }) {
   return (
     <header className="cb-nav">
       <button className="cb-nav-logo" onClick={onLogo}>
-        <BunnyMark size={100} />
+        <BunnyMark size={24} />
         <span>Cofi Bunny</span>
       </button>
 
       <div className="cb-nav-right">
         {me && <span className="cb-rolebadge">{me.role}</span>}
+        {notifStatus !== "unsupported" && notifStatus !== "granted" && (
+          <button
+            className="cb-icon-btn"
+            onClick={onEnableNotifications}
+            title={notifStatus === "denied" ? "Notifications are blocked — enable them in your browser's site settings" : "Enable order notifications"}
+          >
+            <Icon name="bell" size={17} />
+          </button>
+        )}
+        {notifStatus === "granted" && (
+          <span className="cb-icon-btn cb-notif-on" title="Notifications are on">
+            <Icon name="bell" size={17} />
+          </span>
+        )}
         {me?.role === "customer" && (
           <>
             <button className="cb-icon-btn" onClick={onOrders} title="Orders"><Icon name="clock" size={18} /></button>
@@ -1958,6 +2026,18 @@ function AdminScreen({ users, search, setSearch, page, setPage, cafes, orders, o
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<CofiBunnyConnected />);
+</script>
+
+<script>
+  // Registered as a plain script (not inside the React app) so it runs
+  // regardless of login state or which screen is showing.
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch((err) => {
+        console.warn("Service worker registration failed:", err);
+      });
+    });
+  }
 </script>
 </body>
 </html>
