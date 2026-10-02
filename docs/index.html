@@ -321,10 +321,26 @@
 .cb-menueditbtn:hover { background: var(--mocha-900); color: var(--cream); }
 .cb-menueditor-error { color: #8A3B2B; font-size: 13px; margin-bottom: 11px; font-weight: 600; }
 .cb-menueditor-note { color: var(--mocha-600); font-size: 12px; line-height: 1.5; margin: -4px 0 15px; }
+
+/* mascot intro */
+.cb-intro-overlay { position: fixed; inset: 0; z-index: 9999; overflow: hidden; background: radial-gradient(circle at 50% 54%, rgba(220,197,168,0.48), transparent 34%), #FBF7F2; color: #3E2B21; pointer-events: auto; }
+.cb-intro-mascot { position: absolute; left: 50%; top: 50%; width: min(42vw, 224px); max-width: min(224px, 34vh); aspect-ratio: 1; background-image: url("assets/intro/CofiBunny_SpriteSheet_24x256.png"); background-repeat: no-repeat; background-size: 600% 400%; background-position: 0 0; image-rendering: auto; filter: drop-shadow(0 10px 14px rgba(62,43,33,0.12)); transform: translate(-50%, -50%) translateX(-65vw); }
+.cb-intro-wordmark { position: absolute; top: calc(50% + 122px); left: 0; width: 100%; color: #3E2B21; font-family: 'Fraunces', serif; font-size: 25px; font-weight: 500; text-align: center; opacity: 0; transform: translateY(8px); }
+@media (max-width: 600px) {
+  .cb-intro-mascot { width: min(48vw, 224px); }
+  .cb-intro-wordmark { top: calc(50% + 106px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cb-intro-overlay { display: none !important; }
+}
 </style>
 </head>
 <body>
 <div id="root"></div>
+<div class="cb-intro-overlay" id="cb-intro" aria-hidden="true">
+  <div class="cb-intro-mascot" id="cb-intro-mascot"></div>
+  <span class="cb-intro-wordmark" id="cb-intro-wordmark">Cofi Bunny</span>
+</div>
 
 <script>
 /**
@@ -2088,6 +2104,145 @@ function AdminScreen({ users, search, setSearch, page, setPage, cafes, orders, o
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<CofiBunnyConnected />);
+</script>
+
+<script>
+  (() => {
+    const overlay = document.getElementById("cb-intro");
+    const mascot = document.getElementById("cb-intro-mascot");
+    const wordmark = document.getElementById("cb-intro-wordmark");
+    const root = document.getElementById("root");
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let finished = false;
+    let rootWasInert = false;
+    let observer;
+
+    function finishIntro() {
+      if (finished) return;
+      finished = true;
+      observer?.disconnect();
+      mascot.getAnimations().forEach((animation) => animation.cancel());
+      overlay.remove();
+      root.inert = rootWasInert;
+      reducedMotion.removeEventListener?.("change", onMotionPreferenceChange);
+    }
+
+    function onMotionPreferenceChange(event) {
+      if (event.matches) finishIntro();
+    }
+
+    function setFrame(frameIndex) {
+      const column = frameIndex % 6;
+      const row = Math.floor(frameIndex / 6);
+      mascot.style.backgroundPosition = `${column * 20}% ${row * (100 / 3)}%`;
+    }
+
+    function animateFrames(firstFrame, lastFrame, duration, steps, iterations = 1) {
+      const firstColumn = firstFrame % 6;
+      const row = Math.floor(firstFrame / 6);
+      const lastColumn = lastFrame % 6;
+      const animation = mascot.animate([
+        { backgroundPosition: `${firstColumn * 20}% ${row * (100 / 3)}%` },
+        { backgroundPosition: `${lastColumn * 20}% ${row * (100 / 3)}%` },
+      ], { duration, easing: `steps(${steps}, end)`, iterations, fill: "forwards" });
+      return animation.finished.then(() => {
+        setFrame(lastFrame);
+        animation.cancel();
+      }).catch(() => {});
+    }
+
+    function animateTransform(keyframes, duration, easing = "cubic-bezier(.22,.72,.28,1)") {
+      const animation = mascot.animate(keyframes, { duration, easing, fill: "forwards" });
+      return animation.finished.catch(() => {});
+    }
+
+    async function playIntro() {
+      if (finished || reducedMotion.matches) {
+        finishIntro();
+        return;
+      }
+
+      rootWasInert = root.inert;
+      root.inert = true;
+      reducedMotion.addEventListener?.("change", onMotionPreferenceChange);
+      const xform = (x, y, scaleY = 1) => `translate(-50%, -50%) translate(${x}vw, ${y}px) scaleY(${scaleY})`;
+
+      for (let hop = 0; hop < 3; hop++) {
+        if (finished) return;
+        const startX = -65 + hop * (65 / 3);
+        const endX = -65 + (hop + 1) * (65 / 3);
+        setFrame(6);
+        const frames = animateFrames(6, 11, 500, 6);
+        const travel = animateTransform([
+          { offset: 0, transform: xform(startX, 5, 0.88) },
+          { offset: 0.17, transform: xform(startX, 0, 0.94) },
+          { offset: 0.46, transform: xform(startX + (endX - startX) * 0.48, -54, 1.04) },
+          { offset: 0.68, transform: xform(startX + (endX - startX) * 0.72, -54, 1.04) },
+          { offset: 0.9, transform: xform(endX, 0, 0.92) },
+          { offset: 1, transform: xform(endX, 0, 1) },
+        ], 500);
+        await Promise.all([frames, travel]);
+      }
+      if (finished) return;
+
+      setFrame(12);
+      await Promise.all([
+        animateFrames(12, 17, 520, 6),
+        animateTransform([
+          { transform: xform(0, 0, 1) },
+          { offset: 0.28, transform: xform(0, 12, 0.92) },
+          { offset: 0.62, transform: xform(0, -18, 1.04) },
+          { transform: xform(0, 0, 1) },
+        ], 520, "cubic-bezier(.2,.75,.35,1)"),
+      ]);
+      if (finished) return;
+
+      setFrame(0);
+      mascot.style.transform = xform(0, 0);
+      const wordmarkAnimation = wordmark.animate([
+        { opacity: 0, transform: "translateY(8px)" },
+        { opacity: 1, transform: "translateY(0)" },
+      ], { duration: 320, easing: "ease-out", fill: "forwards" });
+      await wordmarkAnimation.finished.catch(() => {});
+      if (finished) return;
+
+      await animateFrames(18, 22, 450, 5, 2);
+      if (finished) return;
+
+      setFrame(23);
+      await new Promise((resolve) => window.setTimeout(resolve, 700));
+      if (finished) return;
+
+      const fade = overlay.animate([{ opacity: 1 }, { opacity: 0 }], {
+        duration: 620,
+        easing: "ease-in-out",
+        fill: "forwards",
+      });
+      await fade.finished.catch(() => {});
+      finishIntro();
+    }
+
+    function waitForLogin() {
+      if (finished) return;
+      if (root.querySelector(".cb-login")) {
+        observer?.disconnect();
+        playIntro();
+        return;
+      }
+      observer ||= new MutationObserver(waitForLogin);
+      observer.observe(root, { childList: true, subtree: true });
+    }
+
+    if (reducedMotion.matches) {
+      finishIntro();
+    } else {
+      const sprite = new Image();
+      sprite.onload = waitForLogin;
+      sprite.onerror = finishIntro;
+      sprite.src = "assets/intro/CofiBunny_SpriteSheet_24x256.png";
+      waitForLogin();
+    }
+  })();
 </script>
 
 <script>
