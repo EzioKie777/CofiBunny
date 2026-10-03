@@ -324,7 +324,7 @@
 
 /* mascot intro */
 .cb-intro-overlay { position: fixed; inset: 0; z-index: 9999; overflow: hidden; background: radial-gradient(circle at 50% 54%, rgba(220,197,168,0.48), transparent 34%), #FBF7F2; color: #3E2B21; pointer-events: auto; }
-.cb-intro-mascot { position: absolute; left: 50%; top: 50%; width: min(42vw, 224px); max-width: min(224px, 34vh); aspect-ratio: 1; background-image: url("assets/intro/CofiBunny_SpriteSheet_24x256.png"); background-repeat: no-repeat; background-size: 600% 400%; background-position: 0 0; image-rendering: auto; filter: drop-shadow(0 10px 14px rgba(62,43,33,0.12)); transform: translate(-50%, -50%) translateX(-65vw); }
+.cb-intro-mascot { position: absolute; left: 50%; top: 50%; width: min(42vw, 224px); max-width: min(224px, 34vh); aspect-ratio: 1; background-image: url("assets/CofiBunny_Intro_SpriteSheet_APPROVED.png"); background-repeat: no-repeat; background-size: 700% 300%; background-position: 0 0; image-rendering: auto; filter: drop-shadow(0 10px 14px rgba(62,43,33,0.12)); transform: translate(-50%, -50%) translateX(-65vw); }
 .cb-intro-wordmark { position: absolute; top: calc(50% + 122px); left: 0; width: 100%; color: #3E2B21; font-family: 'Fraunces', serif; font-size: 25px; font-weight: 500; text-align: center; opacity: 0; transform: translateY(8px); }
 @media (max-width: 600px) {
   .cb-intro-mascot { width: min(48vw, 224px); }
@@ -2131,19 +2131,20 @@ ReactDOM.createRoot(document.getElementById("root")).render(<CofiBunnyConnected 
       if (event.matches) finishIntro();
     }
 
+    function framePosition(frameIndex) {
+      const column = frameIndex % 7;
+      const row = Math.floor(frameIndex / 7);
+      return `${column * (100 / 6)}% ${row * 50}%`;
+    }
+
     function setFrame(frameIndex) {
-      const column = frameIndex % 6;
-      const row = Math.floor(frameIndex / 6);
-      mascot.style.backgroundPosition = `${column * 20}% ${row * (100 / 3)}%`;
+      mascot.style.backgroundPosition = framePosition(frameIndex);
     }
 
     function animateFrames(firstFrame, lastFrame, duration, steps, iterations = 1) {
-      const firstColumn = firstFrame % 6;
-      const row = Math.floor(firstFrame / 6);
-      const lastColumn = lastFrame % 6;
       const animation = mascot.animate([
-        { backgroundPosition: `${firstColumn * 20}% ${row * (100 / 3)}%` },
-        { backgroundPosition: `${lastColumn * 20}% ${row * (100 / 3)}%` },
+        { backgroundPosition: framePosition(firstFrame) },
+        { backgroundPosition: framePosition(lastFrame) },
       ], { duration, easing: `steps(${steps}, end)`, iterations, fill: "forwards" });
       return animation.finished.then(() => {
         setFrame(lastFrame);
@@ -2171,8 +2172,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(<CofiBunnyConnected 
         if (finished) return;
         const startX = -65 + hop * (65 / 3);
         const endX = -65 + (hop + 1) * (65 / 3);
-        setFrame(6);
-        const frames = animateFrames(6, 11, 500, 6);
+        setFrame(0);
+        const frames = animateFrames(0, 6, 500, 7);
         const travel = animateTransform([
           { offset: 0, transform: xform(startX, 5, 0.88) },
           { offset: 0.17, transform: xform(startX, 0, 0.94) },
@@ -2185,9 +2186,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(<CofiBunnyConnected 
       }
       if (finished) return;
 
-      setFrame(12);
+      setFrame(7);
       await Promise.all([
-        animateFrames(12, 17, 520, 6),
+        animateFrames(7, 11, 520, 5),
         animateTransform([
           { transform: xform(0, 0, 1) },
           { offset: 0.28, transform: xform(0, 12, 0.92) },
@@ -2197,19 +2198,23 @@ ReactDOM.createRoot(document.getElementById("root")).render(<CofiBunnyConnected 
       ]);
       if (finished) return;
 
-      setFrame(0);
+      setFrame(12);
       mascot.style.transform = xform(0, 0);
       const wordmarkAnimation = wordmark.animate([
         { opacity: 0, transform: "translateY(8px)" },
         { opacity: 1, transform: "translateY(0)" },
       ], { duration: 320, easing: "ease-out", fill: "forwards" });
-      await wordmarkAnimation.finished.catch(() => {});
+      const waveFrames = (async () => {
+        await animateFrames(12, 13, 128, 2);
+        await animateFrames(14, 16, 192, 3);
+      })();
+      await Promise.all([waveFrames, wordmarkAnimation.finished.catch(() => {})]);
       if (finished) return;
 
-      await animateFrames(18, 22, 450, 5, 2);
+      await animateFrames(17, 20, 450, 4, 2);
       if (finished) return;
 
-      setFrame(23);
+      setFrame(20);
       await new Promise((resolve) => window.setTimeout(resolve, 700));
       if (finished) return;
 
@@ -2239,7 +2244,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(<CofiBunnyConnected 
       const sprite = new Image();
       sprite.onload = waitForLogin;
       sprite.onerror = finishIntro;
-      sprite.src = "assets/intro/CofiBunny_SpriteSheet_24x256.png";
+      sprite.src = "assets/CofiBunny_Intro_SpriteSheet_APPROVED.png";
       waitForLogin();
     }
   })();
